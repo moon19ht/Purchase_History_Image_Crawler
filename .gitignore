@@ -205,3 +205,35 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific ignores for Musinsa Image Crawler
+
+# Downloaded image folders
+musinsa_images_*/
+*_organized/
+*_by_date/
+*_jpg/
+*_resized/
+
+# Selenium WebDriver files
+geckodriver.log
+chromedriver.log
+
+# Browser profile and cache
+firefox_profile/
+chrome_profile/
+
+# Session and download logs
+session_log.json
+download_info.json
+
+# Sensitive configuration (if contains credentials)
+# crawler_config.json  # Uncomment if config contains sensitive data
+
+# Temporary download files
+*.tmp
+*.temp
+
+# Screenshot files (if any debugging screenshots are taken)
+screenshot_*.png
+debug_*.png

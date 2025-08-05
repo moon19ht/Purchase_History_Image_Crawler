@@ -1,0 +1,9 @@
+{
+  "max_images": 1000,
+  "download_delay": 0.5,
+  "page_load_timeout": 30,
+  "implicit_wait": 10,
+  "retry_attempts": 3,
+  "image_quality_filter": true,
+  "headless_mode": false
+}

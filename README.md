@@ -1,24 +1,44 @@
-# 무신사 구매내역 이미지 크롤러 사용 가이드
+# 무신사 구매내역 이미지 크롤러
+
+무신사(Musinsa) 구매 내역에서 상품 이미지를 자동으로 다운로드하는 Python 웹 스크래핑 도구입니다.
+
+## ✨ 주요 기능
+
+- **자동 로그인**: 무신사 계정 자동 로그인 및 세션 관리
+- **전체 구매내역 탐색**: 페이지네이션을 통한 모든 구매 내역 로드
+- **고품질 이미지 다운로드**: 썸네일을 고해상도 버전으로 자동 변환
+- **중복 제거 및 품질 필터링**: 동일 이미지 제거 및 저품질 이미지 필터링
+- **이미지 후처리**: 브랜드별 정리, 형식 변환, 크기 조정
+- **진행률 추적**: 실시간 다운로드 진행률 및 상세 로그
 
 ## 🚀 빠른 시작
 
 ### 1. 필수 요구사항
-- Python 3.7 이상
-- Chrome 브라우저 설치
+- **Python 3.7 이상**
+- **Firefox 브라우저** (권장) 또는 Chrome
 - 안정적인 인터넷 연결
+- 무신사 계정 (구매 내역이 있어야 함)
 
 ### 2. 설치
 ```bash
-# 필요한 패키지 설치
-pip install selenium requests webdriver-manager
+# 저장소 클론
+git clone https://github.com/your-username/Purchase_History_Image_Crawler.git
+cd Purchase_History_Image_Crawler
 
-# 스크립트 다운로드 후 실행
-python musinsa_crawler.py
+# 의존성 설치 (uv 권장)
+uv pip install -r requirements.txt
+
+# 또는 pip 사용
+pip install -r requirements.txt
 ```
 
 ### 3. 실행
 ```bash
-python musinsa_crawler.py
+# Firefox 기반 크롤러 (권장)
+python crawler_main_firefox.py
+
+# 이미지 관리 도구
+python utils.py <다운로드된_폴더_경로>
 ```
 
 ## ⚙️ 설정 옵션
@@ -37,6 +57,19 @@ python musinsa_crawler.py
 }
 ```
 
+## 📁 프로젝트 구조
+
+```
+Purchase_History_Image_Crawler/
+├── crawler_main_firefox.py    # 메인 크롤러 (Firefox 기반)
+├── utils.py                   # 이미지 분석 및 관리 도구
+├── crawler_config.json        # 설정 파일 (자동 생성)
+├── requirements.txt           # Python 의존성
+├── README.md                  # 사용 가이드
+├── CLAUDE.md                  # AI 개발 도우미 가이드
+└── .gitignore                 # Git 무시 파일
+```
+
 ## 📁 출력 구조
 
 크롤링 완료 후 다음과 같은 구조로 파일이 저장됩니다:
@@ -46,8 +79,8 @@ musinsa_images_20240805_143022/
 ├── musinsa_brand_productid_001.jpg
 ├── musinsa_brand_productid_002.webp
 ├── ...
-├── download_info.json          // 다운로드 상세 정보
-└── session_log.json           // 세션 로그
+├── download_info.json          # 다운로드 상세 정보
+└── session_log.json           # 세션 로그
 ```
 
 ## 🔧 고급 기능
@@ -69,11 +102,12 @@ musinsa_images_20240805_143022/
 
 ## 🔍 문제 해결
 
-### Chrome 관련 오류
-**오류**: `ChromeDriver` 관련 오류
+### Firefox 관련 오류
+**오류**: `GeckoDriver` 관련 오류
 **해결**: 
-- Chrome 브라우저가 최신 버전인지 확인
-- `webdriver-manager`가 자동으로 ChromeDriver를 관리함
+- Firefox 브라우저가 설치되어 있는지 확인
+- `webdriver-manager`가 자동으로 GeckoDriver를 다운로드
+- Firefox 업데이트 후 재시도
 
 ### 로그인 실패
 **오류**: 로그인이 계속 실패
@@ -155,3 +189,37 @@ musinsa_images_20240805_143022/
 3. **이미지 URL 패턴 변경**: CDN 구조 변경
 
 정기적으로 스크립트를 테스트하고 필요시 업데이트하는 것을 권장합니다.
+
+## 🛠️ 개발 및 기여
+
+### 개발 환경 설정
+```bash
+# 개발용 의존성 설치
+uv pip install -r requirements.txt
+
+# 코드 품질 도구 (선택사항)
+pip install black flake8 mypy
+```
+
+### 주요 클래스 및 함수
+- `AdvancedMusinsaCrawlerFirefox`: 메인 크롤러 클래스
+- `ImageAnalyzer`: 이미지 분석 및 중복 제거
+- `ImageOrganizer`: 브랜드/날짜별 폴더 정리
+- `ImageConverter`: 형식 변환 및 크기 조정
+
+### 기여 가이드라인
+1. Fork 저장소
+2. 기능 브랜치 생성 (`git checkout -b feature/amazing-feature`)
+3. 변경사항 커밋 (`git commit -m 'Add amazing feature'`)
+4. 브랜치에 Push (`git push origin feature/amazing-feature`)
+5. Pull Request 생성
+
+## 📄 라이선스
+
+이 프로젝트는 개인적 용도로만 사용하시기 바랍니다. 무신사의 이용약관을 준수하며, 서버에 과도한 부하를 주지 않도록 주의하세요.
+
+## 🙏 감사의 말
+
+- [Selenium](https://selenium-python.readthedocs.io/) - 웹 자동화 프레임워크
+- [webdriver-manager](https://github.com/SergeyPirogov/webdriver_manager) - WebDriver 자동 관리
+- [Pillow](https://pillow.readthedocs.io/) - 이미지 처리 라이브러리

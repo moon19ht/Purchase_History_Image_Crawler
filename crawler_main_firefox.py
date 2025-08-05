@@ -1,0 +1,1024 @@
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.firefox.service import Service
+from selenium.webdriver.firefox.options import Options
+import requests
+import os
+import time
+from urllib.parse import urlparse
+import re
+import json
+from datetime import datetime
+
+class AdvancedMusinsaCrawlerFirefox:
+    def __init__(self, download_folder="musinsa_images", config_file="crawler_config.json"):
+        """
+        고급 무신사 크롤러 초기화 (Firefox 버전)
+        """
+        self.download_folder = download_folder
+        self.config_file = config_file
+        self.driver = None
+        self.config = self.load_config()
+        self.setup_driver()
+        self.create_download_folder()
+        self.session_log = []
+    
+    def load_config(self):
+        """설정 파일 로드"""
+        default_config = {
+            "max_images": 1000,
+            "download_delay": 0.5,
+            "page_load_timeout": 30,
+            "implicit_wait": 10,
+            "retry_attempts": 3,
+            "image_quality_filter": True,
+            "headless_mode": False
+        }
+        
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    user_config = json.load(f)
+                    default_config.update(user_config)
+            except Exception as e:
+                print(f"설정 파일 로드 오류: {e}, 기본 설정 사용")
+        
+        return default_config
+    
+    def setup_driver(self):
+        """Firefox 드라이버 자동 설정 (이미지 로딩 활성화)"""
+        try:
+            firefox_options = Options()
+            
+            if self.config.get("headless_mode", False):
+                firefox_options.add_argument("--headless")
+            
+            # Firefox 최적화 옵션 (이미지 로딩 활성화)
+            firefox_options.add_argument("--no-sandbox")
+            firefox_options.add_argument("--disable-dev-shm-usage")
+            
+            # 이미지 로딩 활성화 (기존에 비활성화되어 있었음)
+            firefox_options.set_preference("permissions.default.image", 1)  # 이미지 활성화
+            firefox_options.set_preference("dom.ipc.plugins.enabled.libflashplayer.so", False)
+            firefox_options.set_preference("general.useragent.override", 
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0")
+            
+            # 이미지 품질 설정
+            firefox_options.set_preference("image.http.accept", "image/webp,*/*")
+            
+            print("Firefox 드라이버 설정 중...")
+            
+            try:
+                # geckodriver 자동 설치 시도
+                from webdriver_manager.firefox import GeckoDriverManager
+                service = Service(GeckoDriverManager().install())
+            except ImportError:
+                print("webdriver-manager for Firefox 설치 필요")
+                print("실행: pip install webdriver-manager")
+                # 시스템 PATH의 geckodriver 사용
+                service = Service()
+            
+            self.driver = webdriver.Firefox(service=service, options=firefox_options)
+            
+            # 타임아웃 설정
+            self.driver.implicitly_wait(self.config.get("implicit_wait", 10))
+            self.driver.set_page_load_timeout(self.config.get("page_load_timeout", 30))
+            
+            print("Firefox 드라이버 설정 완료 (이미지 로딩 활성화)")
+            
+        except Exception as e:
+            print(f"Firefox 드라이버 설정 오류: {e}")
+            print("Firefox 브라우저가 설치되어 있는지 확인하세요.")
+            print("다운로드: https://www.mozilla.org/firefox/")
+            raise
+    
+    def create_download_folder(self):
+        """다운로드 폴더 생성"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.download_folder = f"{self.download_folder}_{timestamp}"
+        
+        if not os.path.exists(self.download_folder):
+            os.makedirs(self.download_folder)
+            print(f"다운로드 폴더 생성: {self.download_folder}")
+    
+    def login_with_retry(self, username, password):
+        """재시도 로직이 있는 로그인"""
+        max_attempts = self.config.get("retry_attempts", 3)
+        
+        for attempt in range(max_attempts):
+            try:
+                print(f"로그인 시도 {attempt + 1}/{max_attempts}")
+                
+                self.driver.get("https://www.musinsa.com/auth/login")
+                time.sleep(5)  # 페이지 로딩 충분히 대기
+                
+                print("현재 페이지 URL:", self.driver.current_url)
+                print("페이지 제목:", self.driver.title)
+                
+                # 다양한 셀렉터로 아이디 입력 필드 찾기
+                username_selectors = [
+                    "input[name='id']",
+                    "input[name='loginId']", 
+                    "input[name='email']",
+                    "input[id='id']",
+                    "input[id='loginId']",
+                    "input[placeholder*='아이디']",
+                    "input[placeholder*='이메일']",
+                    ".input-text[name='id']",
+                    "#id",
+                    "#loginId"
+                ]
+                
+                username_field = None
+                for selector in username_selectors:
+                    try:
+                        username_field = WebDriverWait(self.driver, 3).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                        )
+                        print(f"아이디 필드 발견: {selector}")
+                        break
+                    except:
+                        continue
+                
+                if not username_field:
+                    print("아이디 입력 필드를 찾을 수 없습니다.")
+                    # 페이지 소스 일부 출력 (디버깅용)
+                    page_source = self.driver.page_source[:2000]
+                    print("페이지 소스 일부:", page_source)
+                    continue
+                
+                username_field.clear()
+                username_field.send_keys(username)
+                print("아이디 입력 완료")
+                
+                # 다양한 셀렉터로 비밀번호 입력 필드 찾기
+                password_selectors = [
+                    "input[name='pw']",
+                    "input[name='password']",
+                    "input[name='passwd']",
+                    "input[type='password']",
+                    "input[id='pw']",
+                    "input[id='password']",
+                    "input[placeholder*='비밀번호']",
+                    ".input-text[name='pw']",
+                    "#pw",
+                    "#password"
+                ]
+                
+                password_field = None
+                for selector in password_selectors:
+                    try:
+                        password_field = WebDriverWait(self.driver, 3).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                        )
+                        print(f"비밀번호 필드 발견: {selector}")
+                        break
+                    except:
+                        continue
+                
+                if not password_field:
+                    print("비밀번호 입력 필드를 찾을 수 없습니다.")
+                    continue
+                
+                password_field.clear()
+                password_field.send_keys(password)
+                print("비밀번호 입력 완료")
+                
+                # 다양한 셀렉터로 로그인 버튼 찾기
+                login_button_selectors = [
+                    "button[type='submit']",
+                    "input[type='submit']",
+                    "button:contains('로그인')",
+                    ".btn-login",
+                    ".login-btn",
+                    "#loginBtn",
+                    "button.btn-primary",
+                    "button.submit",
+                    ".submit-btn"
+                ]
+                
+                login_button = None
+                for selector in login_button_selectors:
+                    try:
+                        if "contains" in selector:
+                            # XPath로 변환
+                            xpath = f"//button[contains(text(), '로그인')]"
+                            login_button = WebDriverWait(self.driver, 3).until(
+                                EC.element_to_be_clickable((By.XPATH, xpath))
+                            )
+                        else:
+                            login_button = WebDriverWait(self.driver, 3).until(
+                                EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                            )
+                        print(f"로그인 버튼 발견: {selector}")
+                        break
+                    except:
+                        continue
+                
+                if not login_button:
+                    print("로그인 버튼을 찾을 수 없습니다.")
+                    continue
+                
+                login_button.click()
+                print("로그인 버튼 클릭 완료")
+                
+                # 로그인 결과 대기
+                time.sleep(5)
+                
+                # 로그인 성공 확인
+                if self.is_logged_in():
+                    print("로그인 성공!")
+                    return True
+                else:
+                    print(f"로그인 실패 (시도 {attempt + 1})")
+                    if attempt < max_attempts - 1:
+                        time.sleep(3)
+                    
+            except Exception as e:
+                print(f"로그인 시도 {attempt + 1} 중 오류: {e}")
+                if attempt < max_attempts - 1:
+                    time.sleep(5)
+        
+        print("모든 로그인 시도 실패")
+        return False
+    
+    def is_logged_in(self):
+        """로그인 상태 확인"""
+        try:
+            current_url = self.driver.current_url
+            print(f"현재 URL: {current_url}")
+            
+            # URL 기반 로그인 확인
+            if "login" not in current_url and "auth" not in current_url:
+                print("URL 기반으로 로그인 성공 확인")
+                return True
+            
+            # 로그인 관련 요소들을 찾아서 확인
+            logged_in_indicators = [
+                # 로그아웃 버튼이나 사용자 정보 요소들
+                "//a[contains(text(), '로그아웃')]",
+                "//button[contains(text(), '로그아웃')]",
+                "//a[contains(text(), '마이페이지')]",
+                "//a[contains(@href, '/my/')]",
+                "//a[contains(@href, '/order/')]",
+                ".user-info",
+                ".my-menu",
+                ".user-name",
+                "[data-testid='logout']"
+            ]
+            
+            for indicator in logged_in_indicators:
+                try:
+                    if indicator.startswith("//"):
+                        # XPath
+                        element = WebDriverWait(self.driver, 3).until(
+                            EC.presence_of_element_located((By.XPATH, indicator))
+                        )
+                    else:
+                        # CSS selector
+                        element = WebDriverWait(self.driver, 3).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, indicator))
+                        )
+                    
+                    if element:
+                        print(f"로그인 상태 확인됨: {indicator}")
+                        return True
+                except:
+                    continue
+            
+            print("로그인 상태 확인 실패")
+            return False
+            
+        except Exception as e:
+            print(f"로그인 상태 확인 오류: {e}")
+            return False
+    
+    def navigate_to_order_history_with_pagination(self):
+        """구매 내역 페이지로 이동 및 상세 로딩"""
+        try:
+            print("구매 내역 페이지로 이동 중...")
+            
+            # 구매 내역 페이지 URL들 시도
+            order_urls = [
+                "https://www.musinsa.com/order/order-list",
+                "https://www.musinsa.com/my/order",
+                "https://www.musinsa.com/member/order",
+                "https://www.musinsa.com/mypage/order"
+            ]
+            
+            success = False
+            for url in order_urls:
+                try:
+                    print(f"시도 중: {url}")
+                    self.driver.get(url)
+                    time.sleep(5)
+                    
+                    # 구매 내역이 있는지 확인
+                    order_indicators = [
+                        ".order-item",
+                        ".product-item", 
+                        ".item-list",
+                        "[class*='order']",
+                        "img[src*='msscdn.net']"
+                    ]
+                    
+                    for indicator in order_indicators:
+                        elements = self.driver.find_elements(By.CSS_SELECTOR, indicator)
+                        if elements:
+                            print(f"구매 내역 발견: {indicator} ({len(elements)}개)")
+                            success = True
+                            break
+                    
+                    if success:
+                        break
+                        
+                except Exception as e:
+                    print(f"URL {url} 접근 실패: {e}")
+                    continue
+            
+            if not success:
+                print("구매 내역 페이지를 찾을 수 없습니다.")
+                return False
+            
+            # 페이지 완전 로딩 대기
+            print("페이지 로딩 완료 대기 중...")
+            time.sleep(10)
+            
+            # 페이지 정보 출력 (디버깅)
+            print(f"현재 URL: {self.driver.current_url}")
+            print(f"페이지 제목: {self.driver.title}")
+            
+            # 더보기 버튼이나 페이지네이션 처리
+            self.load_all_order_pages()
+            
+            print("모든 구매 내역 페이지 로드 완료")
+            return True
+            
+        except Exception as e:
+            print(f"구매 내역 페이지 이동 중 오류: {e}")
+            return False
+    
+    def load_all_order_pages(self):
+        """모든 구매 내역 페이지 로드"""
+        max_pages = 50  # 최대 페이지 제한
+        current_page = 1
+        
+        while current_page <= max_pages:
+            try:
+                print(f"페이지 {current_page} 로드 중...")
+                
+                # 페이지 끝까지 스크롤
+                self.scroll_to_bottom()
+                
+                # "더보기" 버튼 찾기 (XPath 사용)
+                more_button_found = False
+                more_button_xpaths = [
+                    "//button[contains(text(), '더보기')]",
+                    "//button[contains(@class, 'more-btn')]",
+                    "//button[@data-testid='more']",
+                    "//button[contains(@class, 'load-more')]",
+                    "//a[contains(text(), '더보기')]"
+                ]
+                
+                for xpath in more_button_xpaths:
+                    try:
+                        buttons = self.driver.find_elements(By.XPATH, xpath)
+                        for btn in buttons:
+                            if btn.is_displayed() and btn.is_enabled():
+                                self.driver.execute_script("arguments[0].click();", btn)
+                                print(f"더보기 버튼 클릭: {xpath}")
+                                time.sleep(3)
+                                more_button_found = True
+                                break
+                        if more_button_found:
+                            break
+                    except:
+                        continue
+                
+                if not more_button_found:
+                    # 페이지네이션 번호로 시도
+                    next_page_xpaths = [
+                        f"//a[@href and contains(@href, 'page={current_page + 1}')]",
+                        f"//a[contains(text(), '{current_page + 1}')]"
+                    ]
+                    
+                    page_found = False
+                    for xpath in next_page_xpaths:
+                        try:
+                            next_links = self.driver.find_elements(By.XPATH, xpath)
+                            if next_links:
+                                next_links[0].click()
+                                time.sleep(3)
+                                page_found = True
+                                break
+                        except:
+                            continue
+                    
+                    if not page_found:
+                        print("더 이상 로드할 페이지가 없습니다.")
+                        break
+                
+                current_page += 1
+                
+            except Exception as e:
+                print(f"페이지 {current_page} 로드 중 오류: {e}")
+                break
+    
+    def scroll_to_bottom(self):
+        """페이지 하단까지 스크롤"""
+        last_height = self.driver.execute_script("return document.body.scrollHeight")
+        
+        while True:
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
+            
+            new_height = self.driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                break
+            last_height = new_height
+    
+    def scroll_and_load_images(self):
+        """스크롤을 통한 지연 로딩 이미지 활성화"""
+        try:
+            # 현재 페이지 높이 가져오기
+            last_height = self.driver.execute_script("return document.body.scrollHeight")
+            
+            scroll_count = 0
+            max_scrolls = 10
+            
+            while scroll_count < max_scrolls:
+                # 페이지 끝까지 스크롤
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                
+                # 잠시 대기 (이미지 로딩 시간)
+                time.sleep(2)
+                
+                # 새로운 페이지 높이 가져오기
+                new_height = self.driver.execute_script("return document.body.scrollHeight")
+                
+                # 더 이상 로딩할 컨텐츠가 없으면 중단
+                if new_height == last_height:
+                    break
+                    
+                last_height = new_height
+                scroll_count += 1
+                
+                print(f"스크롤 {scroll_count}/{max_scrolls} 완료")
+            
+            # 페이지 상단으로 다시 이동
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(2)
+            
+            print(f"스크롤 완료: {scroll_count}회 스크롤")
+            
+        except Exception as e:
+            print(f"스크롤 중 오류: {e}")
+    
+    def extract_background_images(self):
+        """CSS 백그라운드 이미지 추출"""
+        try:
+            # JavaScript로 백그라운드 이미지 URL 추출
+            script = """
+            var bgImages = [];
+            var elements = document.querySelectorAll('*');
+            
+            for (var i = 0; i < elements.length; i++) {
+                var style = window.getComputedStyle(elements[i]);
+                var bgImage = style.backgroundImage;
+                
+                if (bgImage && bgImage !== 'none') {
+                    var match = bgImage.match(/url\\(['"]?([^'")]+)['"]?\\)/);
+                    if (match && match[1]) {
+                        bgImages.push(match[1]);
+                    }
+                }
+            }
+            
+            return bgImages;
+            """
+            
+            bg_urls = self.driver.execute_script(script)
+            
+            valid_bg_images = set()
+            for url in bg_urls:
+                if self.is_valid_product_image(url):
+                    high_res_url = self.convert_to_high_resolution(url)
+                    valid_bg_images.add(high_res_url)
+            
+            print(f"백그라운드 이미지 {len(valid_bg_images)}개 추출")
+            return valid_bg_images
+            
+        except Exception as e:
+            print(f"백그라운드 이미지 추출 오류: {e}")
+            return set()
+    
+    def extract_product_images_advanced(self):
+        """고급 상품 이미지 추출 (지연 로딩 대응)"""
+        try:
+            print("상품 이미지 추출 시작...")
+            
+            # 1. 페이지 완전 로딩 대기
+            time.sleep(5)
+            
+            # 2. 스크롤을 통한 지연 로딩 이미지 활성화
+            print("페이지 스크롤하여 이미지 로딩 중...")
+            self.scroll_and_load_images()
+            
+            # 3. 다양한 이미지 셀렉터로 검색
+            image_selectors = [
+                # 상품 썸네일 이미지
+                "img[src*='msscdn.net']",
+                "img[data-src*='msscdn.net']", 
+                "img[src*='musinsa.com']",
+                "img[data-src*='musinsa.com']",
+                
+                # 구매 내역 페이지 특정 셀렉터
+                ".product-img img",
+                ".order-item img", 
+                ".item-image img",
+                ".product-image img",
+                ".thumb img",
+                ".product-thumb img",
+                
+                # 일반 상품 이미지
+                "img[alt*='상품']",
+                "img[alt*='제품']", 
+                "img[class*='product']",
+                "img[class*='item']",
+                "img[class*='thumb']",
+                
+                # lazy loading 이미지
+                "img[loading='lazy']",
+                "img[data-lazy-src]",
+                "img[data-original]",
+                
+                # 추가 무신사 특화 셀렉터
+                "img[src*='image.msscdn.net']",
+                "img[data-src*='image.msscdn.net']",
+                "img[data-original*='msscdn']",
+                "img[data-lazy*='msscdn']"
+            ]
+            
+            all_images = set()
+            
+            for selector in image_selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    print(f"셀렉터 '{selector}': {len(elements)}개 이미지 발견")
+                    
+                    for element in elements:
+                        # src 또는 data-src 속성에서 URL 추출
+                        img_url = element.get_attribute('src') or \
+                                 element.get_attribute('data-src') or \
+                                 element.get_attribute('data-lazy-src') or \
+                                 element.get_attribute('data-original')
+                        
+                        if img_url and self.is_valid_product_image(img_url):
+                            # 고해상도 버전으로 변환
+                            high_res_url = self.convert_to_high_resolution(img_url)
+                            all_images.add(high_res_url)
+                            print(f"유효한 이미지 URL 추가: {high_res_url[:80]}...")
+                            
+                except Exception as e:
+                    print(f"셀렉터 '{selector}' 처리 중 오류: {e}")
+                    continue
+            
+            # 4. JavaScript로 추가 이미지 탐색
+            try:
+                js_images = self.driver.execute_script("""
+                    const images = [];
+                    const allImages = document.querySelectorAll('img');
+                    allImages.forEach(img => {
+                        const src = img.src || img.dataset.src || img.dataset.original || img.dataset.lazySrc;
+                        if (src && (src.includes('msscdn.net') || src.includes('musinsa.com'))) {
+                            images.push(src);
+                        }
+                    });
+                    return images;
+                """)
+                
+                for url in js_images:
+                    if self.is_valid_product_image(url):
+                        high_res_url = self.convert_to_high_resolution(url)
+                        all_images.add(high_res_url)
+                        
+            except Exception as e:
+                print(f"JavaScript 이미지 추출 오류: {e}")
+            
+            # 5. 백그라운드 이미지도 검색
+            bg_images = self.extract_background_images()
+            all_images.update(bg_images)
+            
+            unique_images = list(all_images)
+            
+            # 최대 이미지 수 제한
+            max_images = self.config.get("max_images", 1000)
+            if len(unique_images) > max_images:
+                unique_images = unique_images[:max_images]
+            
+            print(f"총 {len(unique_images)}개의 고유한 상품 이미지 URL 추출 완료")
+            
+            return unique_images
+            
+        except Exception as e:
+            print(f"이미지 추출 중 오류: {e}")
+            return []
+    
+    def is_valid_product_image(self, url):
+        """유효한 상품 이미지 URL인지 확인"""
+        if not url or url.startswith('data:'):
+            return False
+        
+        # 무신사 관련 도메인 확인
+        valid_domains = ['msscdn.net', 'musinsa.com']
+        invalid_patterns = ['logo', 'banner', 'ad', 'icon', 'sprite']
+        
+        try:
+            url_lower = url.lower()
+            
+            # 도메인 확인
+            domain_valid = any(domain in url_lower for domain in valid_domains)
+            if not domain_valid:
+                return False
+            
+            # 불필요한 이미지 패턴 제외
+            if any(pattern in url_lower for pattern in invalid_patterns):
+                return False
+            
+            # 이미지 확장자 확인
+            valid_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+            if not any(ext in url_lower for ext in valid_extensions):
+                return False
+            
+            # 최소 크기 확인 (작은 아이콘 제외)
+            if any(size in url_lower for size in ['16x16', '32x32', '50x50']):
+                return False
+            
+            return True
+            
+        except Exception:
+            return False
+    
+    def convert_to_high_resolution(self, url):
+        """이미지를 고해상도 버전으로 변환"""
+        try:
+            # 무신사 이미지 URL 패턴에 따른 고해상도 변환
+            conversions = {
+                '/thumb/': '/large/',
+                '/small/': '/origin/',
+                '_thumb': '_large',
+                '_small': '_origin',
+                '/150/': '/500/',
+                '/300/': '/800/',
+                '_150.': '_500.',
+                '_300.': '_800.'
+            }
+            
+            high_res_url = url
+            for old, new in conversions.items():
+                if old in url:
+                    high_res_url = url.replace(old, new)
+                    break
+            
+            return high_res_url
+            
+        except Exception:
+            return url
+    
+    def download_images_with_progress(self, image_urls):
+        """진행률 표시와 함께 이미지 다운로드"""
+        if not image_urls:
+            print("다운로드할 이미지가 없습니다.")
+            return 0
+        
+        print(f"{len(image_urls)}개 이미지 다운로드 시작...")
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+            'Referer': 'https://www.musinsa.com/',
+            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+        }
+        
+        downloaded_count = 0
+        failed_count = 0
+        download_info = []
+        
+        for i, url in enumerate(image_urls, 1):
+            try:
+                filename = self.generate_filename(url, i)
+                filepath = os.path.join(self.download_folder, filename)
+                
+                # 이미 존재하는 파일 확인
+                if os.path.exists(filepath):
+                    file_size = os.path.getsize(filepath)
+                    if file_size > 1024:  # 1KB 이상이면 유효한 파일로 간주
+                        print(f"[{i:3d}/{len(image_urls)}] 건너뛰기: {filename}")
+                        continue
+                
+                # 이미지 다운로드
+                response = requests.get(url, headers=headers, timeout=15, stream=True)
+                response.raise_for_status()
+                
+                # Content-Type 확인
+                content_type = response.headers.get('content-type', '')
+                if not content_type.startswith('image/'):
+                    print(f"[{i:3d}/{len(image_urls)}] 이미지가 아님: {filename}")
+                    failed_count += 1
+                    continue
+                
+                # 파일 저장
+                with open(filepath, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                
+                file_size = os.path.getsize(filepath)
+                
+                # 품질 필터링
+                if self.config.get("image_quality_filter", True) and file_size < 5120:  # 5KB 미만
+                    os.remove(filepath)
+                    print(f"[{i:3d}/{len(image_urls)}] 품질 낮음: {filename}")
+                    failed_count += 1
+                    continue
+                
+                downloaded_count += 1
+                download_info.append({
+                    'filename': filename,
+                    'url': url,
+                    'size': file_size,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                print(f"[{i:3d}/{len(image_urls)}] 완료: {filename} ({file_size:,} bytes)")
+                
+                # 다운로드 지연
+                time.sleep(self.config.get("download_delay", 0.5))
+                
+            except requests.exceptions.RequestException as e:
+                print(f"[{i:3d}/{len(image_urls)}] 네트워크 오류: {e}")
+                failed_count += 1
+                continue
+                
+            except Exception as e:
+                print(f"[{i:3d}/{len(image_urls)}] 다운로드 실패: {e}")
+                failed_count += 1
+                continue
+        
+        # 다운로드 정보 저장
+        self.save_download_info(download_info)
+        
+        print(f"\n=== 다운로드 완료 ===")
+        print(f"성공: {downloaded_count}개")
+        print(f"실패: {failed_count}개")
+        print(f"전체: {len(image_urls)}개")
+        
+        return downloaded_count
+    
+    def generate_filename(self, url, index):
+        """고급 파일명 생성"""
+        try:
+            parsed_url = urlparse(url)
+            original_name = os.path.basename(parsed_url.path)
+            
+            # URL에서 상품 ID나 브랜드 정보 추출 시도
+            path_parts = parsed_url.path.split('/')
+            brand_info = ""
+            product_id = ""
+            
+            for part in path_parts:
+                if part.isdigit() and len(part) >= 6:  # 상품 ID로 추정
+                    product_id = part
+                elif part and not part.isdigit() and len(part) > 2:  # 브랜드명으로 추정
+                    brand_info = part[:20]  # 최대 20자
+            
+            # 확장자 결정
+            if original_name and '.' in original_name:
+                name, ext = os.path.splitext(original_name)
+            else:
+                ext = '.jpg'  # 기본 확장자
+                if 'webp' in url.lower():
+                    ext = '.webp'
+                elif 'png' in url.lower():
+                    ext = '.png'
+            
+            # 파일명 조합
+            if product_id and brand_info:
+                filename = f"musinsa_{brand_info}_{product_id}_{index:03d}{ext}"
+            elif product_id:
+                filename = f"musinsa_product_{product_id}_{index:03d}{ext}"
+            elif original_name:
+                filename = f"musinsa_{index:03d}_{original_name}"
+            else:
+                filename = f"musinsa_image_{index:03d}{ext}"
+            
+            # 파일명 정리
+            filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+            filename = re.sub(r'_{2,}', '_', filename)  # 연속 언더스코어 제거
+            
+            return filename
+            
+        except Exception:
+            return f"musinsa_image_{index:03d}.jpg"
+    
+    def save_download_info(self, download_info):
+        """다운로드 정보를 JSON 파일로 저장"""
+        try:
+            info_file = os.path.join(self.download_folder, "download_info.json")
+            
+            summary = {
+                'download_date': datetime.now().isoformat(),
+                'total_images': len(download_info),
+                'total_size_bytes': sum(item['size'] for item in download_info),
+                'config_used': self.config,
+                'images': download_info
+            }
+            
+            with open(info_file, 'w', encoding='utf-8') as f:
+                json.dump(summary, f, indent=2, ensure_ascii=False)
+            
+            print(f"다운로드 정보 저장: {info_file}")
+            
+        except Exception as e:
+            print(f"다운로드 정보 저장 실패: {e}")
+    
+    def log_session(self, message):
+        """세션 로그 기록"""
+        log_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'message': message
+        }
+        self.session_log.append(log_entry)
+    
+    def save_session_log(self):
+        """세션 로그 저장"""
+        try:
+            log_file = os.path.join(self.download_folder, "session_log.json")
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(self.session_log, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"세션 로그 저장 실패: {e}")
+    
+    def run_advanced(self, username, password):
+        """고급 크롤링 프로세스 실행"""
+        try:
+            print("=== 무신사 고급 구매내역 이미지 크롤링 시작 (Firefox) ===")
+            print(f"설정: {self.config}")
+            
+            self.log_session("크롤링 시작")
+            
+            # 1. 로그인
+            if not self.login_with_retry(username, password):
+                self.log_session("로그인 실패")
+                return False
+            
+            # 2. 구매 내역 페이지 이동 및 모든 페이지 로드
+            if not self.navigate_to_order_history_with_pagination():
+                self.log_session("구매 내역 페이지 로드 실패")
+                return False
+            
+            # 3. 고급 이미지 추출
+            image_urls = self.extract_product_images_advanced()
+            
+            if not image_urls:
+                print("추출된 이미지가 없습니다.")
+                self.log_session("이미지 추출 실패 - 이미지 없음")
+                return False
+            
+            self.log_session(f"{len(image_urls)}개 이미지 URL 추출 완료")
+            
+            # 4. 이미지 다운로드
+            downloaded_count = self.download_images_with_progress(image_urls)
+            
+            if downloaded_count > 0:
+                self.log_session(f"다운로드 완료: {downloaded_count}개 이미지")
+                print(f"\n=== 크롤링 성공 완료 ===")
+                print(f"저장 위치: {self.download_folder}")
+                print(f"다운로드된 이미지: {downloaded_count}개")
+                return True
+            else:
+                self.log_session("다운로드 실패")
+                return False
+                
+        except KeyboardInterrupt:
+            print("\n사용자에 의해 중단되었습니다.")
+            self.log_session("사용자 중단")
+            return False
+            
+        except Exception as e:
+            print(f"크롤링 중 예상치 못한 오류: {e}")
+            self.log_session(f"오류 발생: {str(e)}")
+            return False
+        
+        finally:
+            self.save_session_log()
+            self.close()
+    
+    def run_simple(self, username, password):
+        """간단한 크롤링 테스트"""
+        try:
+            print("=== Firefox 브라우저로 테스트 시작 ===")
+            
+            # 로그인 시도
+            if self.login_with_retry(username, password):
+                print("✅ Firefox 브라우저로 로그인 성공!")
+                print("Chrome 문제가 해결될 때까지 Firefox를 사용하세요.")
+                return True
+            else:
+                print("❌ 로그인 실패")
+                return False
+                
+        except Exception as e:
+            print(f"테스트 중 오류: {e}")
+            return False
+        finally:
+            self.close()
+    
+    def close(self):
+        """리소스 정리"""
+        if self.driver:
+            try:
+                self.driver.quit()
+                print("브라우저 종료 완료")
+            except Exception as e:
+                print(f"브라우저 종료 중 오류: {e}")
+
+def main():
+    """Firefox 버전 메인"""
+    print("=== 무신사 구매내역 이미지 크롤러 (Firefox 버전) ===")
+    print("Firefox가 설치되어 있어야 합니다.")
+    
+    # 설정 파일이 없으면 생성
+    if not os.path.exists("crawler_config.json"):
+        create_config_file()
+        print("\n설정 파일이 생성되었습니다. 필요시 수정 후 다시 실행하세요.")
+        return
+    
+    try:
+        print("\n실행 모드를 선택하세요:")
+        print("1. 간단 테스트 (로그인만)")
+        print("2. 전체 크롤링 (이미지 다운로드)")
+        
+        mode = input("선택 (1 또는 2): ").strip()
+        
+        username = input("\n무신사 아이디/이메일: ").strip()
+        password = input("비밀번호: ").strip()
+        
+        if not username or not password:
+            print("아이디와 비밀번호를 모두 입력해야 합니다.")
+            return
+        
+        crawler = AdvancedMusinsaCrawlerFirefox()
+        
+        if mode == "1":
+            # 간단 테스트
+            success = crawler.run_simple(username, password)
+            if success:
+                print("\n✅ Firefox 브라우저 테스트 성공!")
+                print("Chrome 문제가 해결될 때까지 이 버전을 사용하세요.")
+            else:
+                print("\n❌ 테스트 실패")
+        
+        elif mode == "2":
+            # 전체 크롤링
+            success = crawler.run_advanced(username, password)
+            if success:
+                print("\n✅ 크롤링이 성공적으로 완료되었습니다!")
+            else:
+                print("\n❌ 크롤링 중 문제가 발생했습니다.")
+        
+        else:
+            print("잘못된 선택입니다.")
+            
+    except KeyboardInterrupt:
+        print("\n프로그램이 중단되었습니다.")
+    except Exception as e:
+        print(f"\n예상치 못한 오류: {e}")
+        print("Firefox가 설치되어 있는지 확인하세요: https://www.mozilla.org/firefox/")
+
+# 설정 파일 생성 함수
+def create_config_file():
+    """설정 파일 생성"""
+    config = {
+        "max_images": 1000,
+        "download_delay": 0.5,
+        "page_load_timeout": 30,
+        "implicit_wait": 10,
+        "retry_attempts": 3,
+        "image_quality_filter": True,
+        "headless_mode": False
+    }
+    
+    with open("crawler_config.json", 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+    
+    print("설정 파일 'crawler_config.json' 생성 완료")
+    print("필요에 따라 설정을 수정하세요:")
+    print("- max_images: 최대 다운로드 이미지 수")
+    print("- download_delay: 다운로드 간 지연 시간(초)")
+    print("- image_quality_filter: 저품질 이미지 필터링 여부")
+    print("- headless_mode: 브라우저 창 숨김 여부")
+
+if __name__ == "__main__":
+    main()

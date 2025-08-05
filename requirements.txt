@@ -1,14 +1,16 @@
 selenium==4.15.0
 requests==2.31.0
 webdriver-manager==4.0.1
+Pillow>=10.0.0
+uv>=0.4.0
 
 # Improved setup for automatic ChromeDriver installation
-# pip install -r requirements.txt
+# uv pip install -r requirements.txt
 
 # Usage of webdriver-manager for automatic ChromeDriver download and management:
 
 # 1. Basic installation
-# pip install selenium requests webdriver-manager
+# uv pip install selenium requests webdriver-manager Pillow
 
 # 2. Check if Chrome browser is installed
 # Windows: C:\Program Files\Google\Chrome\Application\chrome.exe
@@ -16,4 +18,5 @@ webdriver-manager==4.0.1
 # Linux: /usr/bin/google-chrome
 
 # 3. Run the script
-# python musinsa_crawler.py
+# python crawler_firefox.py (Firefox 버전 추천)
+# python crawler.py (Chrome 버전 - ChromeDriver 문제 있음)
