@@ -1,4 +1,19 @@
-selenium
-webdriver-manager
-python-dotenv
-requests
+selenium==4.15.0
+requests==2.31.0
+webdriver-manager==4.0.1
+
+# Improved setup for automatic ChromeDriver installation
+# pip install -r requirements.txt
+
+# Usage of webdriver-manager for automatic ChromeDriver download and management:
+
+# 1. Basic installation
+# pip install selenium requests webdriver-manager
+
+# 2. Check if Chrome browser is installed
+# Windows: C:\Program Files\Google\Chrome\Application\chrome.exe
+# macOS: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+# Linux: /usr/bin/google-chrome
+
+# 3. Run the script
+# python musinsa_crawler.py

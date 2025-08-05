@@ -1,99 +1,157 @@
-# 무신사 구매 내역 이미지 크롤러
+# 무신사 구매내역 이미지 크롤러 사용 가이드
 
-이 프로젝트는 [Selenium](https://www.selenium.dev/)을 사용하여 무신사(Musinsa) 웹사이트에 자동으로 로그인하고, 사용자의 전체 구매 내역에 있는 상품 이미지들을 크롤링하여 로컬 폴더에 저장하는 자동화 스크립트입니다.
+## 🚀 빠른 시작
 
-## ✨ 주요 기능
+### 1. 필수 요구사항
+- Python 3.7 이상
+- Chrome 브라우저 설치
+- 안정적인 인터넷 연결
 
--   **자동 로그인**: 무신사 계정으로 안전하게 자동 로그인합니다.
--   **구매 내역 접근**: 로그인 후 마이페이지의 구매 내역 페이지로 이동합니다.
--   **이미지 크롤링**: 전체 구매 내역을 탐색하며 모든 상품의 썸네일 이미지를 추출합니다.
--   **이미지 저장**: 크롤링한 이미지를 지정된 로컬 폴더(`images`)에 저장합니다.
-
-## 🛠️ 기술 스택 및 요구사항
-
--   Python 3.8 이상
--   [Selenium](https://www.selenium.dev/): 웹 브라우저 자동화 라이브러리
--   [webdriver-manager](https://pypi.org/project/webdriver-manager/): 웹 드라이버 자동 관리를 위한 라이브러리
-
-## ⚙️ 설치 및 설정 방법
-
-### 1. 프로젝트 클론
-
+### 2. 설치
 ```bash
-git clone https://github.com/your-username/musinsa-crawler.git
-cd musinsa-crawler
+# 필요한 패키지 설치
+pip install selenium requests webdriver-manager
+
+# 스크립트 다운로드 후 실행
+python musinsa_crawler.py
 ```
 
-### 2. 가상 환경 생성 및 활성화
-
-프로젝트의 의존성을 독립적으로 관리하기 위해 가상 환경을 사용하는 것을 권장합니다.
-
--   **Windows:**
-    ```bash
-    python -m venv venv
-    .\venv\Scripts\activate
-    ```
--   **macOS / Linux:**
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
-
-### 3. 의존성 설치
-
-프로젝트에 필요한 라이브러리들을 설치합니다.
-
+### 3. 실행
 ```bash
-pip install -r requirements.txt
+python musinsa_crawler.py
 ```
 
-> **참고**: `requirements.txt` 파일이 없다면 아래 명령어로 직접 라이브러리를 설치하세요.
->
-> ```bash
-> pip install selenium webdriver-manager python-dotenv
-> ```
+## ⚙️ 설정 옵션
 
-### 4. 환경 변수 설정
+처음 실행하면 `crawler_config.json` 파일이 생성됩니다:
 
-보안을 위해 아이디와 비밀번호를 코드에 직접 하드코딩하지 않고, `.env` 파일을 통해 관리합니다.
-
--   프로젝트 루트 디렉토리에 `.env` 파일을 생성하고 아래와 같이 내용을 작성하세요.
-
-    ```env
-    # .env 파일
-    MUSINSA_ID="여기에_무신사_아이디를_입력하세요"
-    MUSINSA_PASSWORD="여기에_무신사_비밀번호를_입력하세요"
-    ```
-
--   `.gitignore` 파일에 `.env` 파일이 포함되어 있는지 확인하여 민감한 정보가 Git에 커밋되지 않도록 하세요.
-
-    ```gitignore
-    # .gitignore
-    .env
-    venv/
-    __pycache__/
-    *.pyc
-    images/
-    ```
-
-## ▶️ 실행 방법
-
-모든 설정이 완료되었다면, 아래 명령어를 통해 크롤러를 실행할 수 있습니다.
-
-```bash
-python main.py
+```json
+{
+  "max_images": 1000,           // 최대 다운로드 이미지 수
+  "download_delay": 0.5,        // 다운로드 간 지연 시간(초)
+  "page_load_timeout": 30,      // 페이지 로드 타임아웃(초)
+  "implicit_wait": 10,          // 요소 대기 시간(초)
+  "retry_attempts": 3,          // 로그인 재시도 횟수
+  "image_quality_filter": true, // 저품질 이미지 필터링
+  "headless_mode": false        // 브라우저 창 숨김 여부
+}
 ```
 
-스크립트가 실행되면 다음 과정이 자동으로 진행됩니다.
+## 📁 출력 구조
 
-1.  Chrome 브라우저가 열립니다.
-2.  무신사 로그인 페이지로 이동하여 `.env` 파일에 입력된 정보로 로그인합니다.
-3.  마이페이지의 구매 내역으로 이동합니다.
-4.  구매한 모든 상품의 이미지를 크롤링하여 프로젝트 내 `images` 폴더에 저장합니다.
+크롤링 완료 후 다음과 같은 구조로 파일이 저장됩니다:
 
-## ⚠️ 주의사항
+```
+musinsa_images_20240805_143022/
+├── musinsa_brand_productid_001.jpg
+├── musinsa_brand_productid_002.webp
+├── ...
+├── download_info.json          // 다운로드 상세 정보
+└── session_log.json           // 세션 로그
+```
 
--   본 스크립트는 개인적인 학습 및 사용 목적으로 제작되었습니다.
--   웹사이트의 구조가 변경될 경우 스크립트가 정상적으로 동작하지 않을 수 있습니다.
--   과도한 크롤링 요청은 웹사이트에 부하를 줄 수 있으며, 계정이 차단될 위험이 있습니다. 책임감 있게 사용해 주세요.
--   이 스크립트의 사용으로 인해 발생하는 모든 문제에 대한 책임은 전적으로 사용자 본인에게 있습니다.
+## 🔧 고급 기능
+
+### 1. 고해상도 이미지 변환
+스크립트는 자동으로 썸네일을 고해상도 버전으로 변환하려고 시도합니다:
+- `thumb` → `large`
+- `small` → `origin`
+- `150px` → `500px`
+
+### 2. 품질 필터링
+5KB 미만의 작은 이미지나 아이콘은 자동으로 제외됩니다.
+
+### 3. 중복 제거
+동일한 이미지 URL은 자동으로 중복 제거됩니다.
+
+### 4. 진행률 표시
+다운로드 진행 상황을 실시간으로 확인할 수 있습니다.
+
+## 🔍 문제 해결
+
+### Chrome 관련 오류
+**오류**: `ChromeDriver` 관련 오류
+**해결**: 
+- Chrome 브라우저가 최신 버전인지 확인
+- `webdriver-manager`가 자동으로 ChromeDriver를 관리함
+
+### 로그인 실패
+**오류**: 로그인이 계속 실패
+**해결**:
+1. 아이디/비밀번호 재확인
+2. 무신사 웹사이트에서 직접 로그인 테스트
+3. 2FA(2단계 인증) 비활성화 확인
+4. `retry_attempts` 설정 증가
+
+### 이미지가 다운로드되지 않음
+**오류**: 이미지 URL을 찾을 수 없음
+**해결**:
+1. 구매 내역이 실제로 존재하는지 확인
+2. 네트워크 연결 상태 확인
+3. `headless_mode`를 `false`로 설정하여 브라우저 창 확인
+
+### 메모리 부족
+**오류**: 메모리 부족으로 중단
+**해결**:
+1. `max_images` 설정을 줄임 (예: 500)
+2. `download_delay` 증가
+3. 다른 프로그램 종료
+
+## 📊 성능 최적화
+
+### 빠른 다운로드
+```json
+{
+  "download_delay": 0.1,
+  "headless_mode": true,
+  "image_quality_filter": false
+}
+```
+
+### 안전한 다운로드 (서버 부하 최소화)
+```json
+{
+  "download_delay": 1.0,
+  "headless_mode": false,
+  "retry_attempts": 5
+}
+```
+
+### 고품질만 다운로드
+```json
+{
+  "image_quality_filter": true,
+  "max_images": 200
+}
+```
+
+## 🚨 주의사항
+
+1. **서버 부하**: 너무 빠른 요청은 IP 차단을 일으킬 수 있습니다
+2. **저작권**: 다운로드한 이미지는 개인적 용도로만 사용하세요
+3. **계정 보안**: 로그인 정보를 안전하게 보관하세요
+4. **리소스 사용**: 대량 다운로드 시 네트워크와 저장공간을 고려하세요
+
+## 🆘 지원
+
+### 일반적인 오류 메시지와 해결방법
+
+| 오류 메시지 | 원인 | 해결방법 |
+|------------|------|----------|
+| `ChromeDriver not found` | ChromeDriver 없음 | `webdriver-manager` 재설치 |
+| `Login failed` | 로그인 실패 | 계정 정보 확인 |
+| `No images found` | 이미지 없음 | 구매 내역 확인 |
+| `Connection timeout` | 네트워크 문제 | 인터넷 연결 확인 |
+
+### 로그 파일 확인
+문제 발생 시 `session_log.json` 파일을 확인하여 상세한 오류 정보를 볼 수 있습니다.
+
+## 🔄 업데이트 및 유지보수
+
+무신사 웹사이트 구조가 변경되면 스크립트 업데이트가 필요할 수 있습니다. 주요 변경사항:
+
+1. **CSS 셀렉터 업데이트**: 무신사가 클래스명이나 ID를 변경하는 경우
+2. **로그인 프로세스 변경**: 2FA 도입이나 보안 강화
+3. **이미지 URL 패턴 변경**: CDN 구조 변경
+
+정기적으로 스크립트를 테스트하고 필요시 업데이트하는 것을 권장합니다.
